@@ -2,11 +2,28 @@
 
 namespace Awobaz\Compoships\Database\Eloquent\Relations;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\BelongsTo as BaseBelongsTo;
 
 class BelongsTo extends BaseBelongsTo
 {
+    /**
+     * Get the results of the relationship.
+     *
+     * @return mixed
+     */
+    public function getResults()
+    {
+        if (! is_array($this->foreignKey)) {
+            if (is_null($this->child->{$this->foreignKey})) {
+                return $this->getDefaultFor($this->parent);
+            }
+        }
+
+        return $this->query->first() ?: $this->getDefaultFor($this->parent);
+    }
+
     /**
      * Set the base constraints on the relation query.
      *
@@ -20,10 +37,11 @@ class BelongsTo extends BaseBelongsTo
             // of the related models matching on the foreign key that's on a parent.
             $table = $this->related->getTable();
 
-            if(is_array($this->ownerKey)){ //Check for multi-columns relationship
-                foreach($this->ownerKey as $index => $key){
-                    if($this->child->{$this->foreignKey[$index]}) {
-                        $this->query->where($table . '.' . $key, '=', $this->child->{$this->foreignKey[ $index ]});
+            if (is_array($this->ownerKey)) { //Check for multi-columns relationship
+                $childAttributes = $this->child->attributesToArray();
+                foreach ($this->ownerKey as $index => $key) {
+                    if (array_key_exists($this->foreignKey[$index], $childAttributes)) {
+                        $this->query->where($table.'.'.$key, '=', $this->child->{$this->foreignKey[$index]});
                     }
                 }
             } else {
@@ -40,10 +58,10 @@ class BelongsTo extends BaseBelongsTo
      */
     public function addEagerConstraints(array $models)
     {
-        if(is_array($this->ownerKey)){ //Check for multi-columns relationship
+        if (is_array($this->ownerKey)) { //Check for multi-columns relationship
             $keys = [];
 
-            foreach ($this->ownerKey as $key){
+            foreach ($this->ownerKey as $key) {
                 $keys[] = $this->related->getTable().'.'.$key;
             }
 
@@ -67,17 +85,16 @@ class BelongsTo extends BaseBelongsTo
     {
         $keys = [];
 
-
         // First we need to gather all of the keys from the parent models so we know what
         // to query for via the eager loading query. We will add them to an array then
         // execute a "where in" statement to gather up all of those related records.
         foreach ($models as $model) {
-            if(is_array($this->foreignKey)){ //Check for multi-columns relationship
-                $keys[] = array_map(function($k) use ($model) {
+            if (is_array($this->foreignKey)) { //Check for multi-columns relationship
+                $keys[] = array_map(function ($k) use ($model) {
                     return $model->{$k};
                 }, $this->foreignKey);
             } else {
-                if (!is_null($value = $model->{$this->foreignKey})) {
+                if (! is_null($value = $model->{$this->foreignKey})) {
                     $keys[] = $value;
                 }
             }
@@ -96,9 +113,51 @@ class BelongsTo extends BaseBelongsTo
     }
 
     /**
+     * Get the fully qualified foreign key of the relationship.
+     *
+     * @return string
+     */
+    public function getQualifiedForeignKey()
+    {
+        if (is_array($this->foreignKey)) { //Check for multi-columns relationship
+            return array_map(function ($k) {
+                return $this->child->getTable().'.'.$k;
+            }, $this->foreignKey);
+        } else {
+            return $this->child->getTable().'.'.$this->foreignKey;
+        }
+    }
+
+    /**
+     * Add the constraints for a relationship query.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @param  \Illuminate\Database\Eloquent\Builder  $parentQuery
+     * @param  array|mixed  $columns
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function getRelationExistenceQuery(Builder $query, Builder $parentQuery, $columns = ['*'])
+    {
+        if ($parentQuery->getQuery()->from == $query->getQuery()->from) {
+            return $this->getRelationExistenceQueryForSelfRelation($query, $parentQuery, $columns);
+        }
+
+        $modelTable = $query->getModel()
+            ->getTable();
+
+        return $query->select($columns)
+            ->whereColumn(
+                $this->getQualifiedForeignKey(), '=', is_array($this->ownerKey) ? //Check for multi-columns relationship
+                array_map(function ($k) use ($modelTable) {
+                    return $modelTable.'.'.$k;
+                }, $this->ownerKey) : $modelTable.'.'.$this->ownerKey
+            );
+    }
+
+    /**
      * Match the eagerly loaded results to their parents.
      *
-     * @param  array   $models
+     * @param  array  $models
      * @param  \Illuminate\Database\Eloquent\Collection  $results
      * @param  string  $relation
      * @return array
@@ -115,12 +174,12 @@ class BelongsTo extends BaseBelongsTo
         $dictionary = [];
 
         foreach ($results as $result) {
-            if(is_array($owner)){ //Check for multi-columns relationship
-                $dictKeyValues = array_map(function($k) use ($result) {
+            if (is_array($owner)) { //Check for multi-columns relationship
+                $dictKeyValues = array_map(function ($k) use ($result) {
                     return $result->{$k};
                 }, $owner);
 
-                $dictionary[ implode('-', $dictKeyValues) ] = $result;
+                $dictionary[implode('-', $dictKeyValues)] = $result;
             } else {
                 $dictionary[$result->getAttribute($owner)] = $result;
             }
@@ -130,8 +189,8 @@ class BelongsTo extends BaseBelongsTo
         // and match back onto their children using these keys of the dictionary and
         // the primary key of the children to map them onto the correct instances.
         foreach ($models as $model) {
-            if(is_array($foreign)){ //Check for multi-columns relationship
-                $dictKeyValues = array_map(function($k) use ($model) {
+            if (is_array($foreign)) { //Check for multi-columns relationship
+                $dictKeyValues = array_map(function ($k) use ($model) {
                     return $model->{$k};
                 }, $foreign);
 

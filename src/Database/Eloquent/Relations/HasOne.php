@@ -2,22 +2,13 @@
 
 namespace Awobaz\Compoships\Database\Eloquent\Relations;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Database\Eloquent\Relations\Concerns\SupportsDefaultModels;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne as BaseHasOne;
 
-class HasOne extends HasOneOrMany
+class HasOne extends BaseHasOne
 {
-    use SupportsDefaultModels;
-
-    /**
-     * Indicates if a default model instance should be used.
-     *
-     * Alternatively, may be a Closure or array.
-     *
-     * @var \Closure|array|bool
-     */
-    protected $withDefault;
+    use HasOneOrMany;
 
     /**
      * Get the results of the relationship.
@@ -26,23 +17,13 @@ class HasOne extends HasOneOrMany
      */
     public function getResults()
     {
-        return $this->query->first() ?: $this->getDefaultFor($this->parent);
-    }
-
-    /**
-     * Initialize the relation on a set of models.
-     *
-     * @param  array   $models
-     * @param  string  $relation
-     * @return array
-     */
-    public function initRelation(array $models, $relation)
-    {
-        foreach ($models as $model) {
-            $model->setRelation($relation, $this->getDefaultFor($model));
+        if (! is_array($this->getParentKey())) {
+            if (is_null($this->getParentKey())) {
+                return $this->getDefaultFor($this->parent);
+            }
         }
 
-        return $models;
+        return $this->query->first() ?: $this->getDefaultFor($this->parent);
     }
 
     /**
@@ -61,8 +42,8 @@ class HasOne extends HasOneOrMany
 
         $foreignKey = $this->getForeignKeyName();
 
-        if(is_array($foreignKey)){ //Check for multi-columns relationship
-            foreach ($foreignKey as $index => $key){
+        if (is_array($foreignKey)) { //Check for multi-columns relationship
+            foreach ($foreignKey as $index => $key) {
                 $instance->setAttribute($key, $model->getAttribute($this->localKey[$index]));
             }
         } else {
@@ -78,6 +59,22 @@ class HasOne extends HasOneOrMany
         }
 
         return $instance;
+    }
+
+    /**
+     * Initialize the relation on a set of models.
+     *
+     * @param  array  $models
+     * @param  string  $relation
+     * @return array
+     */
+    public function initRelation(array $models, $relation)
+    {
+        foreach ($models as $model) {
+            $model->setRelation($relation, $this->getDefaultFor($model));
+        }
+
+        return $models;
     }
 
     /**
@@ -103,16 +100,14 @@ class HasOne extends HasOneOrMany
     {
         $newInstance = $this->related->newInstance();
 
-        if(is_array($this->localKey)){ //Check for multi-columns relationship
+        if (is_array($this->localKey)) { //Check for multi-columns relationship
             $foreignKey = $this->getForeignKeyName();
 
-            foreach ($this->localKey as $index => $key){
+            foreach ($this->localKey as $index => $key) {
                 $newInstance->setAttribute($foreignKey[$index], $parent->{$key});
             }
         } else {
-            return $newInstance->setAttribute(
-                $this->getForeignKeyName(), $parent->{$this->localKey}
-            );
+            return $newInstance->setAttribute($this->getForeignKeyName(), $parent->{$this->localKey});
         }
     }
 }

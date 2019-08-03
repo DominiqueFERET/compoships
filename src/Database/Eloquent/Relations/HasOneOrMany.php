@@ -2,11 +2,11 @@
 
 namespace Awobaz\Compoships\Database\Eloquent\Relations;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasOneOrMany as BaseHasOneOrMany;
 
-abstract class HasOneOrMany extends BaseHasOneOrMany
+trait HasOneOrMany
 {
     /**
      * Set the base constraints on the relation query.
@@ -20,15 +20,17 @@ abstract class HasOneOrMany extends BaseHasOneOrMany
             $parentKeyValue = $this->getParentKey();
 
             //If the foreign key is an array (multi-column relationship), we adjust the query.
-            if(is_array($this->foreignKey)) {
-                foreach ($this->foreignKey as $index => $key){
+            if (is_array($this->foreignKey)) {
+                foreach ($this->foreignKey as $index => $key) {
                     list(, $key) = explode('.', $key);
-                    $fullKey = $this->getRelated()->getTable() . '.' . $key;
+                    $fullKey = $this->getRelated()
+                            ->getTable().'.'.$key;
                     $this->query->where($fullKey, '=', $parentKeyValue[$index]);
                     $this->query->whereNotNull($fullKey);
                 }
             } else {
-                $fullKey = $this->getRelated()->getTable() . '.' . $foreignKey;
+                $fullKey = $this->getRelated()
+                        ->getTable().'.'.$foreignKey;
                 $this->query->where($fullKey, '=', $parentKeyValue);
                 $this->query->whereNotNull($fullKey);
             }
@@ -43,73 +45,7 @@ abstract class HasOneOrMany extends BaseHasOneOrMany
      */
     public function addEagerConstraints(array $models)
     {
-        $this->query->whereIn(
-            $this->foreignKey, $this->getKeys($models, $this->localKey)
-        );
-    }
-
-
-    /**
-     * Match the eagerly loaded results to their many parents.
-     *
-     * @param  array   $models
-     * @param  \Illuminate\Database\Eloquent\Collection  $results
-     * @param  string  $relation
-     * @param  string  $type
-     * @return array
-     */
-    protected function matchOneOrMany(array $models, Collection $results, $relation, $type)
-    {
-        $dictionary = $this->buildDictionary($results);
-
-        // Once we have the dictionary we can simply spin through the parent models to
-        // link them up with their children using the keyed dictionary to make the
-        // matching very convenient and easy work. Then we'll just return them.
-        foreach ($models as $model) {
-            $key = $model->getAttribute($this->localKey);
-            //If the foreign key is an array, we know it's a multi-column relationship
-            //And we join the values to construct the dictionary key
-            $dictKey = is_array($key) ? implode('-', $key) : $key;
-
-            if (isset($dictionary[$dictKey])) {
-                $model->setRelation(
-                    $relation, $this->getRelationValue($dictionary, $dictKey, $type)
-                );
-            }
-        }
-
-        return $models;
-    }
-
-    /**
-     * Build model dictionary keyed by the relation's foreign key.
-     *
-     * @param  \Illuminate\Database\Eloquent\Collection  $results
-     * @return array
-     */
-    protected function buildDictionary(Collection $results)
-    {
-        $dictionary = [];
-
-        $foreign = $this->getForeignKeyName();
-
-        // First we will create a dictionary of models keyed by the foreign key of the
-        // relationship as this will allow us to quickly access all of the related
-        // models without having to do nested looping which will be quite slow.
-        foreach ($results as $result) {
-            //If the foreign key is an array, we know it's a multi-column relationship...
-            if(is_array($foreign)){
-                $dictKeyValues = array_map(function($k) use ($result) {
-                    return $result->{$k};
-                }, $foreign);
-                //... so we join the values to construct the dictionary key
-                $dictionary[ implode('-', $dictKeyValues) ][] = $result;
-            } else {
-                $dictionary[ $result->{$foreign} ][] = $result;
-            }
-        }
-
-        return $dictionary;
+        $this->query->whereIn($this->foreignKey, $this->getKeys($models, $this->localKey));
     }
 
     /**
@@ -141,12 +77,12 @@ abstract class HasOneOrMany extends BaseHasOneOrMany
             return array_map(function ($k) {
                 $segments = explode('.', $k);
 
-                return $segments[ count($segments) - 1 ];
+                return $segments[count($segments) - 1];
             }, $key);
         } else {
             $segments = explode('.', $key);
 
-            return $segments[ count($segments) - 1 ];
+            return $segments[count($segments) - 1];
         }
     }
 
@@ -161,8 +97,8 @@ abstract class HasOneOrMany extends BaseHasOneOrMany
         $foreignKey = $this->getForeignKeyName();
         $parentKeyValue = $this->getParentKey();
 
-        if(is_array($foreignKey)){ //Check for multi-columns relationship
-            foreach ($foreignKey as $index => $key){
+        if (is_array($foreignKey)) { //Check for multi-columns relationship
+            foreach ($foreignKey as $index => $key) {
                 $model->setAttribute($key, $parentKeyValue[$index]);
             }
         } else {
@@ -184,8 +120,8 @@ abstract class HasOneOrMany extends BaseHasOneOrMany
             $foreignKey = $this->getForeignKeyName();
             $parentKeyValue = $this->getParentKey();
 
-            if(is_array($foreignKey)){ //Check for multi-columns relationship
-                foreach ($foreignKey as $index => $key){
+            if (is_array($foreignKey)) { //Check for multi-columns relationship
+                foreach ($foreignKey as $index => $key) {
                     $instance->setAttribute($key, $parentKeyValue[$index]);
                 }
             } else {
@@ -194,5 +130,109 @@ abstract class HasOneOrMany extends BaseHasOneOrMany
 
             $instance->save();
         });
+    }
+
+    /**
+     * Add the constraints for a relationship query on the same table.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @param  \Illuminate\Database\Eloquent\Builder  $parentQuery
+     * @param  array|mixed  $columns
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function getRelationExistenceQueryForSelfRelation(Builder $query, Builder $parentQuery, $columns = ['*'])
+    {
+        $query->from($query->getModel()
+                ->getTable().' as '.$hash = $this->getRelationCountHash());
+
+        $query->getModel()
+            ->setTable($hash);
+
+        return $query->select($columns)
+            ->whereColumn($this->getQualifiedParentKeyName(), '=',
+                is_array($this->getForeignKeyName()) ? //Check for multi-columns relationship
+                    array_map(function ($k) use ($hash) {
+                        return $hash.'.'.$k;
+                    }, $this->getForeignKeyName()) : $hash.'.'.$this->getForeignKeyName());
+    }
+
+    /**
+     * Match the eagerly loaded results to their many parents.
+     *
+     * @param  array  $models
+     * @param  \Illuminate\Database\Eloquent\Collection  $results
+     * @param  string  $relation
+     * @param  string  $type
+     * @return array
+     */
+    protected function matchOneOrMany(array $models, Collection $results, $relation, $type)
+    {
+        $dictionary = $this->buildDictionary($results);
+
+        // Once we have the dictionary we can simply spin through the parent models to
+        // link them up with their children using the keyed dictionary to make the
+        // matching very convenient and easy work. Then we'll just return them.
+        foreach ($models as $model) {
+            $key = $model->getAttribute($this->localKey);
+            //If the foreign key is an array, we know it's a multi-column relationship
+            //And we join the values to construct the dictionary key
+            $dictKey = is_array($key) ? implode('-', $key) : $key;
+
+            if (isset($dictionary[$dictKey])) {
+                $model->setRelation($relation, $this->getRelationValue($dictionary, $dictKey, $type));
+            }
+        }
+
+        return $models;
+    }
+
+    /**
+     * Build model dictionary keyed by the relation's foreign key.
+     *
+     * @param  \Illuminate\Database\Eloquent\Collection  $results
+     * @return array
+     */
+    protected function buildDictionary(Collection $results)
+    {
+        $dictionary = [];
+
+        $foreign = $this->getForeignKeyName();
+
+        // First we will create a dictionary of models keyed by the foreign key of the
+        // relationship as this will allow us to quickly access all of the related
+        // models without having to do nested looping which will be quite slow.
+        foreach ($results as $result) {
+            //If the foreign key is an array, we know it's a multi-column relationship...
+            if (is_array($foreign)) {
+                $dictKeyValues = array_map(function ($k) use ($result) {
+                    return $result->{$k};
+                }, $foreign);
+                //... so we join the values to construct the dictionary key
+                $dictionary[implode('-', $dictKeyValues)][] = $result;
+            } else {
+                $dictionary[$result->{$foreign}][] = $result;
+            }
+        }
+
+        return $dictionary;
+    }
+
+    /**
+     * Set the foreign ID for creating a related model.
+     *
+     * @param  \Illuminate\Database\Eloquent\Model  $model
+     * @return void
+     */
+    protected function setForeignAttributesForCreate(Model $model)
+    {
+        $foreignKey = $this->getForeignKeyName();
+        $parentKeyValue = $this->getParentKey();
+        if (is_array($foreignKey)) { //Check for multi-columns relationship
+            foreach ($foreignKey as $index => $key) {
+                $model->setAttribute($key, $parentKeyValue[$index]);
+            }
+        } else {
+            parent::setForeignAttributesForCreate($model);
+        }
     }
 }

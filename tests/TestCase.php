@@ -2,6 +2,7 @@
 
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Illuminate\Support\Facades\DB;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -14,7 +15,8 @@ abstract class TestCase extends BaseTestCase
     {
         $app = require __DIR__.'/../vendor/laravel/laravel/bootstrap/app.php';
 
-        $app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
+        $app->make('Illuminate\Contracts\Console\Kernel')
+            ->bootstrap();
 
         return $app;
     }
@@ -24,12 +26,14 @@ abstract class TestCase extends BaseTestCase
      *
      * @return void
      */
-    public function setUp()
+    protected function setUp(): void
     {
         parent::setUp();
 
-        $this->app['config']->set('database.default','sqlite');
+        $this->app['config']->set('database.default', 'sqlite');
         $this->app['config']->set('database.connections.sqlite.database', ':memory:');
+
+        DB::statement("PRAGMA foreign_keys = OFF"); //Prevent weird "1 foreign key mismatch" error
 
         $this->migrate();
     }
@@ -42,7 +46,7 @@ abstract class TestCase extends BaseTestCase
     public function migrate()
     {
         $fileSystem = new Filesystem;
-        $fileSystem->requireOnce(__DIR__ . "/migrations.php");
+        $fileSystem->requireOnce(__DIR__."/migrations.php");
 
         (new Migration())->up();
     }

@@ -5,7 +5,7 @@ Compoships
 
 ## The problem
 
-Eloquent doesn't support composite keys. As a consequence, there is no way to define a relationship from one model to another by matching more than one column. Trying to use `where clauses` (like in the example below) won't work when eager loading the relationship because at the time the relationship is processed **$this->f2** is null. 
+Eloquent doesn't support composite keys. As a consequence, there is no way to define a relationship from one model to another by matching more than one column. Trying to use `where clauses` (like in the example below) won't work when eager loading the relationship because at the time the relationship is processed **$this->l2** is null. 
 
 ```php
 namespace App;
@@ -17,7 +17,7 @@ class Foo extends Model
     public function bars()
     {
         //WON'T WORK WITH EAGER LOADING!!!
-        return $this->hasMany('Bar', 'f1', 'f1')->where('f2', $this->f2);
+        return $this->hasMany('Bar', 'f1', 'l1')->where('f2', $this->l2);
     }
 }
 ```
@@ -65,7 +65,7 @@ class A extends Model
     
     public function b()
     {
-        return $this->hasMany('B', ['f1', 'f2'], ['f1', 'f2']);
+        return $this->hasMany('B', ['f1', 'f2'], ['l1', 'l2']);
     }
 }
 ```
@@ -83,7 +83,7 @@ class B extends Model
     
     public function a()
     {
-        return $this->belongsTo('A', ['f1', 'f2'], ['f1', 'f2']);
+        return $this->belongsTo('A', ['f1', 'f2'], ['l1', 'l2']);
     }
 }
 ```
@@ -124,6 +124,10 @@ $ vendor/bin/phpunit
 ## Authors
 
 * [Claudin J. Daniel](https://github.com/topclaudy) - *Initial work*
+
+## Sponsored by
+
+* [Awobaz](https://awobaz.com) - Web/Mobile agency based in Montreal, Canada
 
 ## License
 
